@@ -1,0 +1,22 @@
+{
+  "name": "intern-manager",
+  "version": "1.0.0",
+  "description": "A web application to track intern progress, schedules, and projects",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1"
+  },
+  "keywords": [
+    "intern",
+    "management",
+    "tracking"
+  ],
+  "license": "MIT"
+}
