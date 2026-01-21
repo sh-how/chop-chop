@@ -1,6 +1,8 @@
-# Intern Manager
+# Chop Chop! 🔪
 
-A web application to track intern progress, schedules, and projects.
+*Get moving! No slacking allowed.*
+
+A web application to track intern progress, schedules, and projects (NOT LIMITED TO INTERNS).
 
 ## Features
 
@@ -17,8 +19,8 @@ A web application to track intern progress, schedules, and projects.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/intern-manager.git
-   cd intern-manager
+   git clone https://github.com/sh-how/chop-chop.git
+   cd chop-chop
    ```
 
 2. Install dependencies:
@@ -56,4 +58,5 @@ A web application to track intern progress, schedules, and projects.
 ## License
 
 MIT
+
 

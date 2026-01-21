@@ -7,9 +7,6 @@ data/*.db
 # Uploaded files
 uploads/
 
-# Test files
-test-body.json
-
 # OS files
 .DS_Store
 Thumbs.db

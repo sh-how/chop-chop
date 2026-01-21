@@ -1,7 +1,7 @@
 {
-  "name": "intern-manager",
+  "name": "chop-chop",
   "version": "1.0.0",
-  "description": "A web application to track intern progress, schedules, and projects",
+  "description": "Chop Chop! - A web application to track intern progress, schedules, and projects (NOT LIMITED TO INTERNS)",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
