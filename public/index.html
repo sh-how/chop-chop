@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Intern Manager</title>
+    <title>Chop Chop!</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,8 +27,8 @@
                         </svg>
                     </div>
                     <div class="logo-text">
-                        <span class="logo-title">Intern Manager</span>
-                        <span class="logo-subtitle">Track & Manage</span>
+                        <span class="logo-title">Chop Chop!</span>
+                        <span class="logo-subtitle">Get It Done! 🔪</span>
                     </div>
                 </div>
             </div>
@@ -56,7 +56,7 @@
                             <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                         </svg>
-                        <span>Interns</span>
+                        <span>Minions</span>
                         <span class="nav-badge" id="interns-count">0</span>
                     </a>
                     <a href="#" class="nav-link" data-view="projects">
@@ -163,7 +163,7 @@
                             </div>
                             <div class="stat-content">
                                 <span class="stat-value" id="stat-total-interns">0</span>
-                                <span class="stat-label">Total Interns</span>
+                                <span class="stat-label">Total Minions</span>
                             </div>
                             <div class="stat-trend up">
                                 <span id="stat-active-interns">0 active</span>
@@ -280,7 +280,7 @@
 
                         <div class="card interns-card">
                             <div class="card-header">
-                                <h3>Active Interns</h3>
+                                <h3>Active Minions</h3>
                                 <a href="#" class="card-action" data-view="interns">View all</a>
                             </div>
                             <div class="card-body">
@@ -337,9 +337,9 @@
                                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                                 <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                             </svg>
-                            <h3>No interns yet</h3>
-                            <p>Get started by adding your first intern</p>
-                            <button class="btn btn-primary" onclick="showInternModal()">Add Intern</button>
+                            <h3>No minions yet</h3>
+                            <p>Get started by adding your first minion</p>
+                            <button class="btn btn-primary" onclick="showInternModal()">Add Minion</button>
                         </div>
                     </div>
                 </section>
@@ -386,7 +386,7 @@
                                 <option value="completed">Completed</option>
                             </select>
                             <select id="taskInternFilter" class="filter-select">
-                                <option value="">All Interns</option>
+                                <option value="">All Minions</option>
                             </select>
                             <select id="taskProjectFilter" class="filter-select">
                                 <option value="">All Projects</option>
@@ -464,7 +464,7 @@
                     <div class="view-toolbar">
                         <div class="filters">
                             <select id="reportInternFilter" class="filter-select">
-                                <option value="">All Interns</option>
+                                <option value="">All Minions</option>
                             </select>
                         </div>
                         <button class="btn btn-primary" onclick="showReportModal()">
@@ -536,7 +536,7 @@
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                         <circle cx="9" cy="7" r="4"/>
                     </svg>
-                    <h3>All Interns</h3>
+                    <h3>All Minions</h3>
                 </div>
                 <span class="stat-popup-badge" id="internsPopupBadge">0 total</span>
                 <button class="stat-popup-close" onclick="closeStatPopup('internsPopupOverlay')">
@@ -551,7 +551,7 @@
             </div>
             <div class="stat-popup-footer">
                 <button class="btn btn-secondary" onclick="closeStatPopup('internsPopupOverlay')">Close</button>
-                <button class="btn btn-primary" onclick="closeStatPopup('internsPopupOverlay'); navigateTo('interns');">View All Interns</button>
+                <button class="btn btn-primary" onclick="closeStatPopup('internsPopupOverlay'); navigateTo('interns');">View All Minions</button>
             </div>
         </div>
     </div>

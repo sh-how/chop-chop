@@ -400,8 +400,8 @@ function showConfirmModal(options = {}) {
 // ============================================
 
 const viewInfo = {
-    dashboard: { title: 'Dashboard', subtitle: 'Overview of your intern program' },
-    interns: { title: 'Interns', subtitle: 'Manage your team of interns' },
+    dashboard: { title: 'Dashboard', subtitle: 'Overview of your workforce' },
+    interns: { title: 'Minions', subtitle: 'Manage your worker bees' },
     projects: { title: 'Projects', subtitle: 'Track and manage projects' },
     tasks: { title: 'Tasks', subtitle: 'Organize tasks and assignments' },
     schedule: { title: 'Schedule', subtitle: 'Calendar and event management' },
@@ -712,7 +712,7 @@ function showEventDetailInPopup(eventId) {
                         <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                         <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                     </svg>
-                    Assigned Interns (${event.assigned_interns.length})
+                    Assigned Minions (${event.assigned_interns.length})
                 </h4>
                 <div class="event-detail-interns">
                     ${event.assigned_interns.map(intern => `
@@ -899,7 +899,7 @@ async function showInternsPopup(e) {
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                         <circle cx="9" cy="7" r="4"/>
                     </svg>
-                    <p>No interns yet</p>
+                    <p>No minions yet</p>
                 </div>
             `;
             return;
@@ -968,7 +968,7 @@ async function showInternsPopup(e) {
     } catch (error) {
         body.innerHTML = `
             <div class="stat-popup-empty">
-                <p>Failed to load interns</p>
+                <p>Failed to load minions</p>
                 <button class="btn btn-secondary btn-sm" onclick="showInternsPopup(event)">Try Again</button>
             </div>
         `;
@@ -1438,7 +1438,7 @@ function renderInternsPreview(interns) {
     const container = document.getElementById('internsPreview');
 
     if (!interns.length) {
-        container.innerHTML = '<div class="empty-state small"><p>No active interns</p></div>';
+        container.innerHTML = '<div class="empty-state small"><p>No active minions</p></div>';
         return;
     }
 
@@ -1488,7 +1488,7 @@ async function loadInterns() {
 
         renderInterns(interns);
     } catch (error) {
-        showToast('Failed to load interns', 'error');
+        showToast('Failed to load minions', 'error');
     }
 }
 
@@ -1506,9 +1506,9 @@ function renderInterns(interns) {
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                     <circle cx="9" cy="7" r="4"/>
                 </svg>
-                <h3>No interns yet</h3>
-                <p>Get started by adding your first intern</p>
-                <button class="btn btn-primary" onclick="showInternModal()">Add Intern</button>
+                <h3>No minions yet</h3>
+                <p>Get started by adding your first minion</p>
+                <button class="btn btn-primary" onclick="showInternModal()">Add Minion</button>
             </div>
         `;
         return;
@@ -1642,7 +1642,7 @@ async function showInternModal(id = null) {
         try {
             intern = await InternsAPI.getById(id);
         } catch (error) {
-            showToast('Failed to load intern', 'error');
+            showToast('Failed to load minion', 'error');
             return;
         }
     }
@@ -1651,7 +1651,7 @@ async function showInternModal(id = null) {
     const emails = Array.isArray(intern?.email) ? intern.email : (intern?.email ? [intern.email] : []);
     const phones = Array.isArray(intern?.phone) ? intern.phone : (intern?.phone ? [intern.phone] : []);
 
-    elements.modalTitle.textContent = isEdit ? 'Edit Intern' : 'Add New Intern';
+    elements.modalTitle.textContent = isEdit ? 'Edit Minion' : 'Add New Minion';
     elements.modalBody.innerHTML = `
         <form id="internForm">
             <div class="form-group">
@@ -1724,7 +1724,7 @@ async function showInternModal(id = null) {
             </div>
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary">${isEdit ? 'Update' : 'Add'} Intern</button>
+                <button type="submit" class="btn btn-primary">${isEdit ? 'Update' : 'Add'} Minion</button>
             </div>
         </form>
     `;
@@ -1756,10 +1756,10 @@ async function showInternModal(id = null) {
         try {
             if (isEdit) {
                 await InternsAPI.update(id, data);
-                showToast('Intern updated successfully');
+                showToast('Minion updated successfully');
             } else {
                 await InternsAPI.create(data);
-                showToast('Intern added successfully');
+                showToast('Minion added successfully');
             }
             closeModal();
             refreshView(AppState.currentView);
@@ -2173,7 +2173,7 @@ async function showInternDetail(id, activeTab = 'profile') {
         const intern = await InternsAPI.getById(id);
         
         if (!intern || !intern.id) {
-            showToast('Intern not found', 'error');
+            showToast('Minion not found', 'error');
             console.error('Intern not found for id:', id, 'response:', intern);
             return;
         }
@@ -2700,7 +2700,7 @@ function formatTime(datetime) {
  */
 async function deleteIntern(id) {
     const confirmed = await showConfirmModal({
-        title: 'Delete Intern',
+        title: 'Delete Minion',
         message: 'Are you sure you want to delete this intern? This action cannot be undone.',
         confirmText: 'Delete',
         type: 'danger'
@@ -2710,7 +2710,7 @@ async function deleteIntern(id) {
 
     try {
         await InternsAPI.delete(id);
-        showToast('Intern deleted successfully');
+        showToast('Minion deleted successfully');
         refreshView(AppState.currentView);
     } catch (error) {
         showToast(error.message, 'error');
@@ -2879,7 +2879,7 @@ async function showProjectDetail(id) {
                 
                 ${interns.length > 0 ? `
                 <div class="project-detail-section">
-                    <h4>Assigned Interns (${interns.length})</h4>
+                    <h4>Assigned Minions (${interns.length})</h4>
                     <div class="project-detail-interns">
                         ${interns.map(intern => `
                             <div class="project-intern-item ${intern.is_lead ? 'is-lead' : ''}" onclick="closeModal(); showInternDetail(${intern.id});">
@@ -2972,7 +2972,7 @@ async function showProjectModal(id = null) {
                     <input type="number" name="progress" min="0" max="100" value="${project?.progress || 0}">
                 </div>
                 <div class="form-group">
-                    <label>Assign Interns</label>
+                    <label>Assign Minions</label>
                     <p class="form-hint">Click to assign, star to designate as project lead</p>
                     <div class="intern-assignment-list" id="internAssignments">
                         ${interns.map(intern => `
@@ -3683,7 +3683,7 @@ async function showEventModal(id = null) {
                 <input type="text" name="location" value="${event?.location || ''}" placeholder="Meeting room, Zoom link, etc.">
             </div>
             <div class="form-group">
-                <label>Assign Interns</label>
+                <label>Assign Minions</label>
                 <p class="form-hint">Click to select interns for this event</p>
                 <div class="intern-assignment-list">
                     ${interns.length === 0 ? '<p class="empty-state-text">No interns available</p>' : ''}
@@ -4033,7 +4033,7 @@ async function showReportModal(id = null) {
     elements.modalBody.innerHTML = `
         <form id="reportForm">
             <div class="form-group">
-                <label>Intern *</label>
+                <label>Minion *</label>
                 <select name="intern_id" required ${isEdit ? 'disabled' : ''}>
                     <option value="">Select intern</option>
                     ${interns.map(i => `

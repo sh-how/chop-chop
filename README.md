@@ -6,9 +6,20 @@ A web application to track intern progress, schedules, and projects (NOT LIMITED
 
 ## Features
 
-- Track intern information and progress
+- Track interns information and progress
 - Manage schedules and projects
 - File upload support
+
+## Screenshots
+
+### Dashboard
+![Dashboard](screenshots/dashboard.png)
+
+### Minions Management
+![Interns](screenshots/interns.png)
+
+### Schedule & Calendar
+![Schedule](screenshots/schedule.png)
 
 ## Prerequisites
 
