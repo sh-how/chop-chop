@@ -4,6 +4,9 @@ node_modules/
 # Database
 data/*.db
 
+# Google OAuth token
+data/google-token.json
+
 # Uploaded files
 uploads/
 

@@ -292,7 +292,8 @@ function showToast(message, type = 'success') {
     const icons = {
         success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
         error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-        warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+        warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
     };
 
     toast.innerHTML = `
@@ -4316,6 +4317,402 @@ window.editInternNote = editInternNote;
 window.updateInternNote = updateInternNote;
 window.deleteInternNote = deleteInternNote;
 
+// Sync functions
+window.handleSyncClick = handleSyncClick;
+window.showSyncModal = showSyncModal;
+window.closeSyncModal = closeSyncModal;
+window.connectGoogle = connectGoogle;
+window.disconnectGoogle = disconnectGoogle;
+window.exportToGoogleDrive = exportToGoogleDrive;
+window.showImportOptions = showImportOptions;
+window.closeImportOptions = closeImportOptions;
+window.importFromGoogleDrive = importFromGoogleDrive;
+
+// ============================================
+// Google Drive Sync Functions
+// ============================================
+
+/**
+ * Handles sync button click - auto-syncs if connected, shows modal if not.
+ */
+async function handleSyncClick() {
+    try {
+        setSyncingState(true);
+        const status = await SyncAPI.getStatus();
+        
+        if (status.connected) {
+            // Already connected - just sync (export) directly
+            await performQuickSync();
+        } else {
+            // Not connected - show modal for setup
+            showSyncModal();
+        }
+    } catch (error) {
+        console.error('Sync click error:', error);
+        showSyncModal();
+    } finally {
+        setSyncingState(false);
+    }
+}
+
+/**
+ * Performs a quick sync (export) without showing modal.
+ */
+async function performQuickSync() {
+    try {
+        setSyncingState(true);
+        showToast('Syncing to Google Drive...', 'info');
+        
+        const result = await SyncAPI.exportData();
+        
+        showToast('Synced to Google Drive successfully!', 'success');
+        updateSyncStatusDot(true);
+    } catch (error) {
+        console.error('Quick sync failed:', error);
+        
+        if (error.message && (error.message.includes('expired') || error.message.includes('401'))) {
+            showToast('Session expired. Please reconnect.', 'error');
+            showSyncModal();
+        } else {
+            showToast(error.message || 'Sync failed', 'error');
+        }
+    } finally {
+        setSyncingState(false);
+    }
+}
+
+/**
+ * Shows the sync modal and loads current sync status.
+ */
+async function showSyncModal() {
+    const overlay = document.getElementById('syncModalOverlay');
+    overlay.classList.add('active');
+    await loadSyncStatus();
+}
+
+/**
+ * Closes the sync modal.
+ */
+function closeSyncModal() {
+    const overlay = document.getElementById('syncModalOverlay');
+    overlay.classList.remove('active');
+}
+
+/**
+ * Loads and displays the current sync status.
+ */
+async function loadSyncStatus() {
+    showSyncState('loading', 'Checking connection...');
+    
+    try {
+        const status = await SyncAPI.getStatus();
+        
+        if (!status.configured) {
+            showSyncState('notConfigured');
+        } else if (!status.connected) {
+            showSyncState('notConnected');
+        } else {
+            showSyncState('connected');
+            updateConnectedUI(status);
+        }
+        
+        // Update sidebar sync status dot
+        updateSyncStatusDot(status.connected);
+    } catch (error) {
+        console.error('Failed to load sync status:', error);
+        showSyncState('notConnected');
+        showToast('Failed to check sync status', 'error');
+    }
+}
+
+/**
+ * Shows a specific sync state in the modal.
+ * @param {string} state - The state to show (loading, notConfigured, notConnected, connected).
+ * @param {string} loadingText - Optional text to show for loading state.
+ */
+function showSyncState(state, loadingText = 'Loading...') {
+    const states = ['NotConfigured', 'NotConnected', 'Connected', 'Loading'];
+    
+    states.forEach(s => {
+        const el = document.getElementById(`syncState${s}`);
+        if (el) el.style.display = 'none';
+    });
+    
+    if (state === 'loading') {
+        const loadingEl = document.getElementById('syncStateLoading');
+        const loadingTextEl = document.getElementById('syncLoadingText');
+        if (loadingEl) loadingEl.style.display = 'flex';
+        if (loadingTextEl) loadingTextEl.textContent = loadingText;
+    } else if (state === 'notConfigured') {
+        const el = document.getElementById('syncStateNotConfigured');
+        if (el) el.style.display = 'flex';
+    } else if (state === 'notConnected') {
+        const el = document.getElementById('syncStateNotConnected');
+        if (el) el.style.display = 'flex';
+    } else if (state === 'connected') {
+        const el = document.getElementById('syncStateConnected');
+        if (el) el.style.display = 'flex';
+    }
+}
+
+/**
+ * Updates the connected state UI with user info.
+ * @param {Object} status - The sync status object.
+ */
+function updateConnectedUI(status) {
+    const userInfoEl = document.getElementById('syncUserInfo');
+    const avatarEl = document.getElementById('syncUserAvatar');
+    const nameEl = document.getElementById('syncUserName');
+    const emailEl = document.getElementById('syncUserEmail');
+    
+    if (status.user) {
+        if (userInfoEl) userInfoEl.style.display = 'flex';
+        if (avatarEl) {
+            avatarEl.src = status.user.picture || '';
+            avatarEl.style.display = status.user.picture ? 'block' : 'none';
+        }
+        if (nameEl) nameEl.textContent = status.user.name || 'Connected';
+        if (emailEl) emailEl.textContent = status.user.email || '';
+    } else {
+        // No user info available, show minimal connected state
+        if (userInfoEl) userInfoEl.style.display = 'flex';
+        if (avatarEl) avatarEl.style.display = 'none';
+        if (nameEl) nameEl.textContent = 'Connected to Google Drive';
+        if (emailEl) emailEl.textContent = 'User info not available';
+    }
+    
+    const lastBackupEl = document.getElementById('syncLastBackupText');
+    if (lastBackupEl) {
+        if (status.lastBackup) {
+            const date = new Date(status.lastBackup.modifiedTime);
+            const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            const size = formatFileSize(parseInt(status.lastBackup.size) || 0);
+            lastBackupEl.textContent = `Last backup: ${formattedDate} (${size})`;
+        } else {
+            lastBackupEl.textContent = 'No backup found';
+        }
+    }
+}
+
+/**
+ * Formats a file size in bytes to a human-readable string.
+ * @param {number} bytes - The file size in bytes.
+ * @returns {string} Formatted file size.
+ */
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+/**
+ * Updates the sync status dot in the sidebar.
+ * @param {boolean} connected - Whether connected to Google.
+ */
+function updateSyncStatusDot(connected) {
+    const dot = document.getElementById('syncStatusDot');
+    if (dot) {
+        dot.classList.toggle('connected', connected);
+        dot.title = connected ? 'Connected to Google Drive' : 'Not connected';
+    }
+}
+
+/**
+ * Sets the sync status dot to syncing state.
+ * @param {boolean} syncing - Whether currently syncing.
+ */
+function setSyncingState(syncing) {
+    const dot = document.getElementById('syncStatusDot');
+    if (dot) {
+        dot.classList.toggle('syncing', syncing);
+    }
+}
+
+/**
+ * Initiates Google OAuth flow.
+ */
+async function connectGoogle() {
+    try {
+        const result = await SyncAPI.startAuth();
+        if (result.authUrl) {
+            // Open Google auth in the same window
+            window.location.href = result.authUrl;
+        }
+    } catch (error) {
+        console.error('Failed to start auth:', error);
+        showToast(error.message || 'Failed to connect to Google', 'error');
+    }
+}
+
+/**
+ * Disconnects from Google Drive.
+ */
+async function disconnectGoogle() {
+    try {
+        await SyncAPI.logout();
+        showToast('Disconnected from Google Drive', 'success');
+        await loadSyncStatus();
+    } catch (error) {
+        console.error('Failed to disconnect:', error);
+        showToast(error.message || 'Failed to disconnect', 'error');
+    }
+}
+
+/**
+ * Exports all data to Google Drive.
+ */
+async function exportToGoogleDrive() {
+    const exportBtn = document.getElementById('syncExportBtn');
+    const originalText = exportBtn.innerHTML;
+    
+    try {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<span class="sync-spinner" style="width:16px;height:16px;border-width:2px;"></span> Exporting...';
+        setSyncingState(true);
+        
+        const result = await SyncAPI.exportData();
+        
+        showToast('Data exported to Google Drive successfully!', 'success');
+        await loadSyncStatus();
+    } catch (error) {
+        console.error('Export failed:', error);
+        showToast(error.message || 'Export failed', 'error');
+        
+        if (error.message && error.message.includes('expired')) {
+            await loadSyncStatus();
+        }
+    } finally {
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = originalText;
+        setSyncingState(false);
+    }
+}
+
+/**
+ * Shows import options modal with backup preview.
+ */
+async function showImportOptions() {
+    const overlay = document.getElementById('importOptionsOverlay');
+    const previewEl = document.getElementById('importPreview');
+    
+    previewEl.innerHTML = '<p style="text-align:center;">Loading preview...</p>';
+    overlay.classList.add('active');
+    
+    try {
+        const preview = await SyncAPI.previewImport();
+        
+        let html = `<p style="margin-bottom:var(--space-2);">Backup from: ${new Date(preview.exportedAt).toLocaleString()}</p>`;
+        html += '<div class="import-preview-items">';
+        
+        for (const [table, count] of Object.entries(preview.tables || {})) {
+            if (count > 0) {
+                const displayName = table.replace(/_/g, ' ');
+                html += `<div class="import-preview-item"><span>${displayName}</span><span>${count} records</span></div>`;
+            }
+        }
+        
+        html += '</div>';
+        previewEl.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to preview import:', error);
+        
+        if (error.message && error.message.includes('No backup found')) {
+            previewEl.innerHTML = '<p style="text-align:center;color:var(--warning);">No backup found in Google Drive. Please export first.</p>';
+        } else {
+            previewEl.innerHTML = `<p style="text-align:center;color:var(--danger);">Failed to load preview: ${error.message}</p>`;
+        }
+    }
+}
+
+/**
+ * Closes the import options modal.
+ */
+function closeImportOptions() {
+    const overlay = document.getElementById('importOptionsOverlay');
+    overlay.classList.remove('active');
+}
+
+/**
+ * Imports data from Google Drive.
+ */
+async function importFromGoogleDrive() {
+    const mergeRadio = document.querySelector('input[name="importMode"][value="merge"]');
+    const merge = mergeRadio ? mergeRadio.checked : false;
+    
+    closeImportOptions();
+    showSyncState('loading', merge ? 'Merging data...' : 'Importing data...');
+    setSyncingState(true);
+    
+    try {
+        const result = await SyncAPI.importData({ merge });
+        
+        if (result.success) {
+            showToast('Data imported successfully! Refreshing...', 'success');
+            
+            // Refresh the application data
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showToast('Import completed with some errors', 'warning');
+            console.warn('Import errors:', result.errors);
+            await loadSyncStatus();
+        }
+    } catch (error) {
+        console.error('Import failed:', error);
+        showToast(error.message || 'Import failed', 'error');
+        await loadSyncStatus();
+    } finally {
+        setSyncingState(false);
+    }
+}
+
+/**
+ * Checks URL parameters for sync callbacks.
+ */
+function checkSyncCallbackParams() {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    if (urlParams.has('sync_success')) {
+        showToast('Connected to Google Drive! Click Sync to backup.', 'success');
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        // Update sync status dot
+        updateSyncStatusDot(true);
+    }
+    
+    if (urlParams.has('sync_error')) {
+        const error = urlParams.get('sync_error');
+        showToast(`Google connection failed: ${error}`, 'error');
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+}
+
+/**
+ * Initializes sync status on page load.
+ */
+async function initSyncStatus() {
+    try {
+        const status = await SyncAPI.getStatus();
+        updateSyncStatusDot(status.connected);
+    } catch (error) {
+        // Silently fail - sync status is not critical
+        console.warn('Could not check sync status:', error);
+    }
+    
+    // Add right-click handler for sync button to open full modal
+    const syncBtn = document.getElementById('syncBtn');
+    if (syncBtn) {
+        syncBtn.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showSyncModal();
+        });
+    }
+}
+
 // ============================================
 // Initialize Application
 // ============================================
@@ -4325,6 +4722,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadDashboard();
     // Initialize custom dropdowns for filter selects
     initCustomDropdowns();
+    
+    // Check for sync callback params (after OAuth redirect)
+    checkSyncCallbackParams();
+    
+    // Initialize sync status indicator
+    initSyncStatus();
+    
+    // Close sync modal when clicking outside
+    const syncModalOverlay = document.getElementById('syncModalOverlay');
+    if (syncModalOverlay) {
+        syncModalOverlay.addEventListener('click', (e) => {
+            if (e.target === syncModalOverlay) {
+                closeSyncModal();
+            }
+        });
+    }
+    
+    // Close import options when clicking outside
+    const importOptionsOverlay = document.getElementById('importOptionsOverlay');
+    if (importOptionsOverlay) {
+        importOptionsOverlay.addEventListener('click', (e) => {
+            if (e.target === importOptionsOverlay) {
+                closeImportOptions();
+            }
+        });
+    }
     
     // Close weekly events popup when clicking outside
     const eventsPopupOverlay = document.getElementById('eventsPopupOverlay');

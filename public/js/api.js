@@ -510,6 +510,65 @@ const InternNotesAPI = {
     }
 };
 
+// ============================================
+// Sync API (Google Drive)
+// ============================================
+
+const SyncAPI = {
+    /**
+     * Gets current sync status and Google account info.
+     * @returns {Promise<Object>} Sync status with configured, connected, user info.
+     */
+    async getStatus() {
+        return apiRequest('/sync/status');
+    },
+
+    /**
+     * Initiates Google OAuth flow.
+     * @returns {Promise<Object>} Object containing authUrl to redirect user.
+     */
+    async startAuth() {
+        return apiRequest('/sync/auth');
+    },
+
+    /**
+     * Disconnects from Google Drive.
+     * @returns {Promise<Object>} Success confirmation.
+     */
+    async logout() {
+        return apiRequest('/sync/logout', { method: 'POST' });
+    },
+
+    /**
+     * Exports all data to Google Drive.
+     * @returns {Promise<Object>} Export result with file info.
+     */
+    async exportData() {
+        return apiRequest('/sync/export', { method: 'POST' });
+    },
+
+    /**
+     * Previews what would be imported from Google Drive.
+     * @returns {Promise<Object>} Summary of backup contents.
+     */
+    async previewImport() {
+        return apiRequest('/sync/preview');
+    },
+
+    /**
+     * Imports data from Google Drive.
+     * @param {Object} options - Import options.
+     * @param {boolean} options.merge - If true, merges with existing data.
+     * @returns {Promise<Object>} Import result with counts.
+     */
+    async importData(options = { merge: false }) {
+        return apiRequest('/sync/import', {
+            method: 'POST',
+            body: options
+        });
+    }
+};
+
 // Export APIs for use in app.js
 window.InternsAPI = InternsAPI;
 window.ProjectsAPI = ProjectsAPI;
@@ -519,4 +578,5 @@ window.ReportsAPI = ReportsAPI;
 window.DashboardAPI = DashboardAPI;
 window.InternFilesAPI = InternFilesAPI;
 window.InternNotesAPI = InternNotesAPI;
+window.SyncAPI = SyncAPI;
 

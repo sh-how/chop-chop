@@ -3,12 +3,16 @@
  * Express server with SQLite database for managing interns, projects, and schedules.
  */
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 const multer = require('multer');
+const { setupSyncRoutes } = require('./sync');
 
 const app = express();
 
@@ -1874,6 +1878,12 @@ app.put('/api/traits/:key/reorder', (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// ============================================
+// Google Drive Sync Routes
+// ============================================
+
+setupSyncRoutes(app, db);
 
 // ============================================
 // Serve Frontend
