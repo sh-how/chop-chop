@@ -8,8 +8,10 @@ const path = require('path');
 const fs = require('fs');
 
 // Scopes required for Google Drive access and user profile
+// Using drive.appdata scope to store data in the hidden app folder,
+// which is accessible across all devices with the same Google account
 const SCOPES = [
-    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.appdata',
     'https://www.googleapis.com/auth/userinfo.profile',
     'https://www.googleapis.com/auth/userinfo.email'
 ];
@@ -235,7 +237,9 @@ function importDatabaseData(db, data, options = { merge: false }) {
 }
 
 /**
- * Finds the backup file in Google Drive.
+ * Finds the backup file in Google Drive's app data folder.
+ * The app data folder is a hidden folder that is shared across all devices
+ * using the same Google account, making cross-device sync possible.
  * @param {OAuth2Client} auth - Authenticated OAuth2 client.
  * @returns {Promise<Object|null>} File metadata or null if not found.
  */
@@ -245,7 +249,7 @@ async function findBackupFile(auth) {
     const response = await drive.files.list({
         q: `name='${BACKUP_FILENAME}' and trashed=false`,
         fields: 'files(id, name, modifiedTime, size)',
-        spaces: 'drive'
+        spaces: 'appDataFolder'
     });
 
     if (response.data.files && response.data.files.length > 0) {
@@ -255,7 +259,9 @@ async function findBackupFile(auth) {
 }
 
 /**
- * Uploads data to Google Drive.
+ * Uploads data to Google Drive's app data folder.
+ * Files in appDataFolder are hidden from the user but accessible
+ * by the same app across all devices with the same Google account.
  * @param {OAuth2Client} auth - Authenticated OAuth2 client.
  * @param {Object} data - Data to upload.
  * @returns {Promise<Object>} Upload result.
@@ -264,7 +270,7 @@ async function uploadToGoogleDrive(auth, data) {
     const drive = google.drive({ version: 'v3', auth });
     const content = JSON.stringify(data, null, 2);
 
-    // Check if file already exists
+    // Check if file already exists in app data folder
     const existingFile = await findBackupFile(auth);
 
     let response;
@@ -279,11 +285,12 @@ async function uploadToGoogleDrive(auth, data) {
             fields: 'id, name, modifiedTime, size'
         });
     } else {
-        // Create new file
+        // Create new file in app data folder
         response = await drive.files.create({
             requestBody: {
                 name: BACKUP_FILENAME,
-                mimeType: BACKUP_MIME_TYPE
+                mimeType: BACKUP_MIME_TYPE,
+                parents: ['appDataFolder']
             },
             media: {
                 mimeType: BACKUP_MIME_TYPE,
