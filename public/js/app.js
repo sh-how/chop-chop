@@ -1914,10 +1914,11 @@ async function updateInternTrait(internId, traitName, value) {
         // Save updated intern
         await InternsAPI.update(internId, { traits });
         
-        // Refresh the card display
-        showInternDetail(internId);
+        // Update DOM directly instead of re-rendering
+        updateTraitDisplay(internId, traitName, clampedValue, traits);
         
-        showToast(`${INTERN_TRAITS[traitName].label} updated to ${clampedValue}`, 'success');
+        const trait = getTraitByKey(traitName);
+        showToast(`${trait?.label || traitName} updated to ${clampedValue}`, 'success');
     } catch (error) {
         showToast('Failed to update trait', 'error');
     }
@@ -1925,9 +1926,10 @@ async function updateInternTrait(internId, traitName, value) {
 
 /**
  * Adjusts a trait value by a delta amount.
+ * Updates DOM directly without re-rendering to preserve scroll position.
  * @param {number} internId - Intern ID.
  * @param {string} traitName - Name of the trait.
- * @param {number} delta - Amount to change (+5 or -5).
+ * @param {number} delta - Amount to change (+1 or -1).
  */
 async function adjustInternTrait(internId, traitName, delta) {
     try {
@@ -1939,10 +1941,83 @@ async function adjustInternTrait(internId, traitName, delta) {
         if (newValue !== currentValue) {
             traits[traitName] = newValue;
             await InternsAPI.update(internId, { traits });
-            showInternDetail(internId);
+            
+            // Update DOM directly instead of re-rendering
+            updateTraitDisplay(internId, traitName, newValue, traits);
         }
     } catch (error) {
         showToast('Failed to update trait', 'error');
+    }
+}
+
+/**
+ * Updates the trait display in the DOM without re-rendering the entire modal.
+ * @param {number} internId - Intern ID.
+ * @param {string} traitName - Name of the trait that changed.
+ * @param {number} newValue - The new trait value.
+ * @param {Object} allTraits - All trait values for recalculating overall.
+ */
+function updateTraitDisplay(internId, traitName, newValue, allTraits) {
+    // Find and update the trait control value and bar
+    const traitControls = document.querySelectorAll('.trait-control-item');
+    traitControls.forEach(control => {
+        const minusBtn = control.querySelector('.trait-btn-minus');
+        if (minusBtn && minusBtn.onclick?.toString().includes(`'${traitName}'`)) {
+            // Update value display
+            const valueEl = control.querySelector('.trait-control-value');
+            if (valueEl) {
+                valueEl.textContent = newValue;
+                valueEl.className = `trait-control-value ${getStatColorClass(newValue)}`;
+            }
+            
+            // Update progress bar
+            const barFill = control.querySelector('.stat-bar-fill');
+            if (barFill) {
+                barFill.style.width = `${newValue}%`;
+                barFill.className = `stat-bar-fill ${getStatColorClass(newValue)}`;
+            }
+        }
+    });
+    
+    // Update the card stat for this trait
+    const trait = getTraitByKey(traitName);
+    if (trait) {
+        const cardStats = document.querySelectorAll('.card-stat');
+        cardStats.forEach(stat => {
+            const label = stat.querySelector('.card-stat-label');
+            if (label && label.textContent === trait.abbr) {
+                const valueEl = stat.querySelector('.card-stat-value');
+                if (valueEl) {
+                    valueEl.textContent = newValue;
+                    valueEl.className = `card-stat-value ${getStatColorClass(newValue)}`;
+                }
+            }
+        });
+    }
+    
+    // Recalculate and update overall rating
+    const traitKeys = INTERN_TRAITS.map(t => t.key);
+    let total = 0;
+    let count = 0;
+    traitKeys.forEach(key => {
+        const value = allTraits[key] ?? 50;
+        total += value;
+        count++;
+    });
+    const overall = count > 0 ? Math.round(total / count) : 50;
+    
+    // Update overall rating on card
+    const overallEl = document.querySelector('.card-overall-rating');
+    if (overallEl) {
+        overallEl.textContent = overall;
+    }
+    
+    // Update card type (gold/silver/bronze) if needed
+    const newCardType = getCardType(overall);
+    const fifaCard = document.querySelector('.fifa-card');
+    if (fifaCard) {
+        fifaCard.classList.remove('gold', 'silver', 'bronze');
+        fifaCard.classList.add(newCardType);
     }
 }
 
@@ -1980,10 +2055,12 @@ function renderTraitControls(internId, traitKey, value) {
     if (!trait) return '';
     
     return `
-        <div class="trait-control-item">
+        <div class="trait-control-item" data-trait-key="${traitKey}" data-intern-id="${internId}">
             <div class="trait-control-header">
                 <span class="trait-control-label">${escapeHtml(trait.label)}</span>
-                <span class="trait-control-value ${getStatColorClass(value)}">${value}</span>
+                <span class="trait-control-value ${getStatColorClass(value)}" 
+                      onclick="startTraitEdit(this, ${internId}, '${traitKey}', ${value})" 
+                      title="Click to edit">${value}</span>
             </div>
             <div class="trait-control-bar">
                 <button class="trait-btn trait-btn-minus" onclick="adjustInternTrait(${internId}, '${traitKey}', -1)" title="Decrease by 1">-</button>
@@ -1995,6 +2072,86 @@ function renderTraitControls(internId, traitKey, value) {
             <span class="trait-control-desc">${escapeHtml(trait.description)}</span>
         </div>
     `;
+}
+
+/**
+ * Starts inline editing of a trait value.
+ * @param {HTMLElement} element - The value span element.
+ * @param {number} internId - Intern ID.
+ * @param {string} traitKey - Trait key name.
+ * @param {number} currentValue - Current trait value.
+ */
+function startTraitEdit(element, internId, traitKey, currentValue) {
+    // Don't start edit if already editing
+    if (element.querySelector('input')) return;
+    
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = '99';
+    input.value = currentValue;
+    input.className = 'trait-edit-input';
+    
+    // Store original value for cancel
+    input.dataset.originalValue = currentValue;
+    
+    // Replace span content with input
+    element.textContent = '';
+    element.appendChild(input);
+    input.focus();
+    input.select();
+    
+    // Handle blur (save)
+    input.addEventListener('blur', () => {
+        finishTraitEdit(element, input, internId, traitKey);
+    });
+    
+    // Handle enter key (save) and escape (cancel)
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            input.value = input.dataset.originalValue;
+            input.blur();
+        }
+    });
+}
+
+/**
+ * Finishes inline editing of a trait value.
+ * @param {HTMLElement} element - The value span element.
+ * @param {HTMLInputElement} input - The input element.
+ * @param {number} internId - Intern ID.
+ * @param {string} traitKey - Trait key name.
+ */
+async function finishTraitEdit(element, input, internId, traitKey) {
+    const newValue = parseInt(input.value) || 50;
+    const clampedValue = Math.max(1, Math.min(99, newValue));
+    const originalValue = parseInt(input.dataset.originalValue);
+    
+    // Restore span display
+    element.textContent = clampedValue;
+    element.className = `trait-control-value ${getStatColorClass(clampedValue)}`;
+    
+    // If value changed, update via API
+    if (clampedValue !== originalValue) {
+        try {
+            const intern = await InternsAPI.getById(internId);
+            const traits = intern.traits || {};
+            traits[traitKey] = clampedValue;
+            await InternsAPI.update(internId, { traits });
+            
+            // Update display
+            updateTraitDisplay(internId, traitKey, clampedValue, traits);
+        } catch (error) {
+            // Revert on error
+            element.textContent = originalValue;
+            element.className = `trait-control-value ${getStatColorClass(originalValue)}`;
+            showToast('Failed to update trait', 'error');
+        }
+    }
 }
 
 /**
@@ -3161,6 +3318,57 @@ async function loadTasks() {
 }
 
 /**
+ * Refreshes the custom dropdown options to match the native select options.
+ * @param {HTMLSelectElement} select - The native select element.
+ */
+function refreshCustomDropdown(select) {
+    const wrapper = select.closest('.custom-select-wrapper');
+    if (!wrapper) return;
+
+    const dropdown = wrapper.querySelector('.custom-select-dropdown');
+    const trigger = wrapper.querySelector('.custom-select-trigger');
+    if (!dropdown || !trigger) return;
+
+    // Clear existing custom options
+    dropdown.innerHTML = '';
+
+    // Rebuild custom options from native select
+    Array.from(select.options).forEach((option, index) => {
+        const customOption = document.createElement('div');
+        customOption.className = 'custom-select-option';
+        if (index === select.selectedIndex) {
+            customOption.classList.add('selected');
+        }
+        customOption.textContent = option.text;
+        customOption.dataset.value = option.value;
+
+        customOption.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Update native select
+            select.value = option.value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Update trigger text
+            trigger.textContent = option.text;
+
+            // Update selected state
+            dropdown.querySelectorAll('.custom-select-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            customOption.classList.add('selected');
+
+            // Close dropdown
+            wrapper.classList.remove('open');
+        });
+
+        dropdown.appendChild(customOption);
+    });
+
+    // Update trigger text
+    trigger.textContent = select.options[select.selectedIndex]?.text || 'Select...';
+}
+
+/**
  * Populates task filter dropdowns.
  * @param {Array} interns - List of interns.
  * @param {Array} projects - List of projects.
@@ -3169,27 +3377,41 @@ function populateTaskFilters(interns, projects) {
     const internFilter = document.getElementById('taskInternFilter');
     const projectFilter = document.getElementById('taskProjectFilter');
 
-    if (internFilter && internFilter.options.length <= 1) {
+    if (internFilter) {
+        // Clear existing options except the first "All" option
+        while (internFilter.options.length > 1) {
+            internFilter.remove(1);
+        }
+        // Add intern options
         interns.forEach(intern => {
             const option = document.createElement('option');
             option.value = intern.id;
             option.textContent = intern.name;
             internFilter.appendChild(option);
         });
+        // Refresh the custom dropdown to show new options
+        refreshCustomDropdown(internFilter);
     }
 
-    if (projectFilter && projectFilter.options.length <= 1) {
+    if (projectFilter) {
+        // Clear existing options except the first "All" option
+        while (projectFilter.options.length > 1) {
+            projectFilter.remove(1);
+        }
+        // Add project options
         projects.forEach(project => {
             const option = document.createElement('option');
             option.value = project.id;
             option.textContent = project.name;
             projectFilter.appendChild(option);
         });
+        // Refresh the custom dropdown to show new options
+        refreshCustomDropdown(projectFilter);
     }
 }
 
 /**
- * Renders the tasks kanban board.
+ * Renders the tasks kanban board with drag and drop support.
  * @param {Array} tasks - List of tasks.
  */
 function renderTasks(tasks) {
@@ -3203,7 +3425,7 @@ function renderTasks(tasks) {
         if (countEl) countEl.textContent = statusTasks.length;
 
         if (!statusTasks.length) {
-            column.innerHTML = '<div class="empty-state small"><p>No tasks</p></div>';
+            column.innerHTML = '<div class="empty-state small drop-zone"><p>No tasks</p></div>';
             return;
         }
 
@@ -3212,7 +3434,10 @@ function renderTasks(tasks) {
             const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed';
 
             return `
-                <div class="task-item" onclick="showTaskModal(${task.id})">
+                <div class="task-item" 
+                     draggable="true" 
+                     data-task-id="${task.id}"
+                     data-task-status="${task.status}">
                     <div class="task-item-header">
                         <h4>${escapeHtml(task.title)}</h4>
                         <span class="priority-badge priority-${task.priority}">${task.priority}</span>
@@ -3234,6 +3459,232 @@ function renderTasks(tasks) {
             `;
         }).join('');
     });
+
+    // Initialize drag and drop after rendering
+    initTaskDragAndDrop();
+}
+
+/**
+ * Currently dragged task element reference.
+ */
+let draggedTask = null;
+
+/**
+ * Tracks if a drag operation occurred to prevent click from firing.
+ */
+let taskDragOccurred = false;
+
+/**
+ * Initializes drag and drop functionality for task items.
+ */
+function initTaskDragAndDrop() {
+    const taskItems = document.querySelectorAll('.task-item[draggable="true"]');
+    const columns = document.querySelectorAll('.task-column-body');
+
+    // Task item drag events
+    taskItems.forEach(item => {
+        item.addEventListener('dragstart', handleTaskDragStart);
+        item.addEventListener('dragend', handleTaskDragEnd);
+        item.addEventListener('click', handleTaskClick);
+    });
+
+    // Column drop zone events
+    columns.forEach(column => {
+        column.addEventListener('dragover', handleTaskDragOver);
+        column.addEventListener('dragenter', handleTaskDragEnter);
+        column.addEventListener('dragleave', handleTaskDragLeave);
+        column.addEventListener('drop', handleTaskDrop);
+    });
+}
+
+/**
+ * Handles click on a task item - opens modal if no drag occurred.
+ * @param {MouseEvent} e - The click event.
+ */
+function handleTaskClick(e) {
+    // Don't open modal if we just finished dragging
+    if (taskDragOccurred) {
+        taskDragOccurred = false;
+        return;
+    }
+    
+    const taskId = parseInt(this.dataset.taskId);
+    if (taskId) {
+        showTaskModal(taskId);
+    }
+}
+
+/**
+ * Handles the start of a task drag operation.
+ * @param {DragEvent} e - The drag event.
+ */
+function handleTaskDragStart(e) {
+    draggedTask = this;
+    taskDragOccurred = true;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.taskId);
+    
+    // Add dragging class to body for global styling
+    document.body.classList.add('task-dragging');
+}
+
+/**
+ * Handles the end of a task drag operation.
+ * @param {DragEvent} e - The drag event.
+ */
+function handleTaskDragEnd(e) {
+    this.classList.remove('dragging');
+    document.body.classList.remove('task-dragging');
+    
+    // Remove all drag-over states
+    document.querySelectorAll('.task-column-body').forEach(col => {
+        col.classList.remove('drag-over');
+    });
+    
+    draggedTask = null;
+    
+    // Reset drag flag after a short delay to allow click handler to check it
+    setTimeout(() => {
+        taskDragOccurred = false;
+    }, 100);
+}
+
+/**
+ * Handles dragging over a valid drop target.
+ * Moves the dragged element in real-time for visual feedback.
+ * @param {DragEvent} e - The drag event.
+ */
+function handleTaskDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    const draggingItem = document.querySelector('.task-item.dragging');
+    if (!draggingItem) return;
+    
+    const afterElement = getDragAfterElement(this, e.clientY);
+    
+    // Move the dragged element in the DOM for real-time visual feedback
+    if (afterElement == null) {
+        // Append to end of column
+        if (this.lastElementChild !== draggingItem) {
+            this.appendChild(draggingItem);
+        }
+    } else if (afterElement !== draggingItem) {
+        // Insert before the target element
+        this.insertBefore(draggingItem, afterElement);
+    }
+}
+
+/**
+ * Handles entering a drop zone.
+ * @param {DragEvent} e - The drag event.
+ */
+function handleTaskDragEnter(e) {
+    e.preventDefault();
+    this.classList.add('drag-over');
+}
+
+/**
+ * Handles leaving a drop zone.
+ * @param {DragEvent} e - The drag event.
+ */
+function handleTaskDragLeave(e) {
+    // Only remove drag-over if we're leaving the column entirely
+    if (!this.contains(e.relatedTarget)) {
+        this.classList.remove('drag-over');
+    }
+}
+
+/**
+ * Handles dropping a task onto a column.
+ * Updates task status and order, persisting to the database.
+ * @param {DragEvent} e - The drag event.
+ */
+async function handleTaskDrop(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+    
+    const taskId = parseInt(e.dataTransfer.getData('text/plain'));
+    const newStatus = this.closest('.task-column').dataset.status;
+    const task = AppState.tasks.find(t => t.id === taskId);
+    
+    if (!task) return;
+    
+    // Update local state for the dragged task's status
+    const oldStatus = task.status;
+    task.status = newStatus;
+    
+    // Get the new order from DOM and save to database
+    await saveTaskOrderFromDOM();
+    
+    // Show feedback if status changed
+    if (oldStatus !== newStatus) {
+        showToast(`Task moved to ${newStatus.replace('_', ' ')}`, 'success');
+    }
+}
+
+/**
+ * Reads task order from DOM and saves to database.
+ * Updates both local state and persists to backend.
+ */
+async function saveTaskOrderFromDOM() {
+    const tasksToUpdate = [];
+    const statuses = ['pending', 'in_progress', 'completed'];
+    
+    statuses.forEach(status => {
+        const column = document.getElementById(`tasks-${status}`);
+        if (!column) return;
+        
+        const taskItems = column.querySelectorAll('.task-item[data-task-id]');
+        taskItems.forEach((item, index) => {
+            const taskId = parseInt(item.dataset.taskId);
+            const task = AppState.tasks.find(t => t.id === taskId);
+            if (task) {
+                // Update local state
+                task.status = status;
+                task.sort_order = index;
+                
+                // Add to update list
+                tasksToUpdate.push({
+                    id: taskId,
+                    status: status,
+                    sort_order: index
+                });
+            }
+        });
+    });
+    
+    // Save to database
+    try {
+        await TasksAPI.reorder(tasksToUpdate);
+    } catch (error) {
+        console.error('Failed to save task order:', error);
+        showToast('Failed to save task order', 'error');
+        // Reload tasks to revert to server state
+        loadTasks();
+    }
+}
+
+/**
+ * Determines which element the dragged item should be placed after.
+ * @param {HTMLElement} container - The container element.
+ * @param {number} y - The current Y position of the mouse.
+ * @returns {HTMLElement|null} The element to insert after, or null for end.
+ */
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.task-item:not(.dragging)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
 /**
@@ -3917,15 +4368,26 @@ async function loadReports() {
         AppState.reports = reports;
         AppState.interns = interns;
 
-        // Populate filter
+        // Populate filter dropdown
         const filterEl = document.getElementById('reportInternFilter');
-        if (filterEl && filterEl.options.length <= 1) {
+        if (filterEl) {
+            // Clear existing options except the first "All" option
+            while (filterEl.options.length > 1) {
+                filterEl.remove(1);
+            }
+            // Add intern options
             interns.forEach(intern => {
                 const option = document.createElement('option');
                 option.value = intern.id;
                 option.textContent = intern.name;
                 filterEl.appendChild(option);
             });
+            // Restore selected value if it exists
+            if (internFilter) {
+                filterEl.value = internFilter;
+            }
+            // Refresh the custom dropdown to show new options
+            refreshCustomDropdown(filterEl);
         }
 
         renderReports(reports);
@@ -4246,11 +4708,32 @@ document.getElementById('internStatusFilter')?.addEventListener('change', loadIn
 document.getElementById('internDeptFilter')?.addEventListener('change', loadInterns);
 document.getElementById('projectStatusFilter')?.addEventListener('change', loadProjects);
 document.getElementById('projectPriorityFilter')?.addEventListener('change', loadProjects);
-document.getElementById('taskStatusFilter')?.addEventListener('change', () => {
-    const status = document.getElementById('taskStatusFilter').value;
-    const filteredTasks = status ? AppState.tasks.filter(t => t.status === status) : AppState.tasks;
+document.getElementById('taskStatusFilter')?.addEventListener('change', applyTaskFilters);
+document.getElementById('taskInternFilter')?.addEventListener('change', applyTaskFilters);
+document.getElementById('taskProjectFilter')?.addEventListener('change', applyTaskFilters);
+
+/**
+ * Applies all task filters (status, intern, project) and renders the filtered tasks.
+ */
+function applyTaskFilters() {
+    const status = document.getElementById('taskStatusFilter')?.value || '';
+    const internId = document.getElementById('taskInternFilter')?.value || '';
+    const projectId = document.getElementById('taskProjectFilter')?.value || '';
+
+    let filteredTasks = AppState.tasks;
+
+    if (status) {
+        filteredTasks = filteredTasks.filter(t => t.status === status);
+    }
+    if (internId) {
+        filteredTasks = filteredTasks.filter(t => t.intern_id === parseInt(internId));
+    }
+    if (projectId) {
+        filteredTasks = filteredTasks.filter(t => t.project_id === parseInt(projectId));
+    }
+
     renderTasks(filteredTasks);
-});
+}
 document.getElementById('reportInternFilter')?.addEventListener('change', loadReports);
 
 // View toggle (grid/list)
@@ -4304,6 +4787,10 @@ window.deleteReport = deleteReport;
 window.selectDate = selectDate;
 window.closeModal = closeModal;
 window.closeDetailPanel = closeDetailPanel;
+
+// Trait adjustment functions
+window.adjustInternTrait = adjustInternTrait;
+window.startTraitEdit = startTraitEdit;
 
 // Intern files and notes
 window.handleFileUpload = handleFileUpload;

@@ -179,12 +179,20 @@ function initializeDatabase() {
             priority TEXT DEFAULT 'medium',
             due_date TEXT,
             completed_at TEXT,
+            sort_order INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
             FOREIGN KEY (intern_id) REFERENCES interns(id) ON DELETE SET NULL
         )
     `);
+
+    // Add sort_order column if it doesn't exist (migration for existing databases)
+    try {
+        db.exec('ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0');
+    } catch (e) {
+        // Column already exists, ignore
+    }
 
     // Create events table
     db.exec(`
@@ -1051,7 +1059,7 @@ app.get('/api/tasks', (req, res) => {
             params.push(project_id);
         }
 
-        query += ' ORDER BY t.due_date ASC, t.created_at DESC';
+        query += ' ORDER BY t.status, t.sort_order ASC, t.created_at DESC';
         const tasks = db.prepare(query).all(...params);
         res.json(tasks);
     } catch (error) {
@@ -1070,12 +1078,18 @@ app.post('/api/tasks', (req, res) => {
             return res.status(400).json({ error: 'Task title is required' });
         }
 
+        const taskStatus = status || 'pending';
+        
+        // Get max sort_order for this status and add 1
+        const maxOrder = db.prepare('SELECT MAX(sort_order) as max_order FROM tasks WHERE status = ?').get(taskStatus);
+        const sortOrder = (maxOrder?.max_order || 0) + 1;
+
         const stmt = db.prepare(`
-            INSERT INTO tasks (title, description, status, priority, due_date, intern_id, project_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (title, description, status, priority, due_date, intern_id, project_id, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
         
-        const result = stmt.run(title, description, status || 'pending', priority || 'medium', due_date, intern_id, project_id);
+        const result = stmt.run(title, description, taskStatus, priority || 'medium', due_date, intern_id, project_id, sortOrder);
         
         logActivity('created', 'task', result.lastInsertRowid, title);
         
@@ -1138,6 +1152,40 @@ app.delete('/api/tasks/:id', (req, res) => {
         logActivity('deleted', 'task', req.params.id, existing.title);
         
         res.json({ message: 'Task deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * PUT /api/tasks/reorder - Reorder tasks in bulk.
+ * Body: { tasks: [{ id: number, status: string, sort_order: number }, ...] }
+ */
+app.put('/api/tasks/reorder', (req, res) => {
+    try {
+        const { tasks } = req.body;
+        
+        if (!tasks || !Array.isArray(tasks)) {
+            return res.status(400).json({ error: 'Tasks array is required' });
+        }
+
+        const updateStmt = db.prepare(`
+            UPDATE tasks 
+            SET sort_order = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `);
+
+        const transaction = db.transaction(() => {
+            for (const task of tasks) {
+                if (task.id && typeof task.sort_order === 'number') {
+                    updateStmt.run(task.sort_order, task.status, task.id);
+                }
+            }
+        });
+
+        transaction();
+
+        res.json({ success: true, message: 'Tasks reordered successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

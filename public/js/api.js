@@ -215,6 +215,18 @@ const TasksAPI = {
         return apiRequest(`/tasks/${id}`, {
             method: 'DELETE'
         });
+    },
+
+    /**
+     * Reorders tasks in bulk.
+     * @param {Array} tasks - Array of { id, status, sort_order } objects.
+     * @returns {Promise<Object>} Success confirmation.
+     */
+    async reorder(tasks) {
+        return apiRequest('/tasks/reorder', {
+            method: 'PUT',
+            body: { tasks }
+        });
     }
 };
 

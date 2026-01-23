@@ -1406,6 +1406,45 @@ input, select, textarea {
     color: var(--danger);
 }
 
+/* Task Drag and Drop */
+.task-item[draggable="true"] {
+    cursor: grab;
+    user-select: none;
+}
+
+.task-item[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.task-item.dragging {
+    opacity: 0.6;
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    border-color: var(--accent-primary);
+}
+
+.task-column-body.drag-over {
+    background: rgba(99, 102, 241, 0.05);
+    border-radius: var(--radius-md);
+}
+
+body.task-dragging .task-column-body {
+    min-height: 100px;
+}
+
+body.task-dragging .task-column-body .empty-state {
+    border: 2px dashed var(--border-muted);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    transition: var(--transition-fast);
+}
+
+body.task-dragging .task-column-body.drag-over .empty-state {
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
 /* ============================================
    Schedule View
    ============================================ */
@@ -4354,6 +4393,43 @@ span.flatpickr-weekday {
     font-family: var(--font-mono);
     min-width: 28px;
     text-align: right;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s ease;
+}
+
+.trait-control-value:hover {
+    background: var(--bg-overlay);
+}
+
+.trait-edit-input {
+    width: 45px;
+    padding: 2px 4px;
+    font-size: var(--text-sm);
+    font-weight: 700;
+    font-family: var(--font-mono);
+    text-align: center;
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    outline: none;
+}
+
+.trait-edit-input:focus {
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+}
+
+/* Hide number input spinners */
+.trait-edit-input::-webkit-outer-spin-button,
+.trait-edit-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.trait-edit-input[type=number] {
+    -moz-appearance: textfield;
 }
 
 .trait-control-bar {

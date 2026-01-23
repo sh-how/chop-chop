@@ -42,6 +42,7 @@ function createOAuth2Client() {
 
 /**
  * Loads saved token from file if it exists.
+ * Validates that the token has the required scopes; clears token if scopes don't match.
  * @returns {Object|null} Saved token or null.
  */
 function loadSavedToken() {
@@ -51,6 +52,19 @@ function loadSavedToken() {
             console.log('Token file found, loading...');
             const tokenData = fs.readFileSync(TOKEN_PATH, 'utf8');
             const token = JSON.parse(tokenData);
+            
+            // Validate token has the required scopes
+            if (token.scope) {
+                const tokenScopes = token.scope.split(' ');
+                const hasAppDataScope = tokenScopes.some(s => s.includes('drive.appdata'));
+                
+                if (!hasAppDataScope) {
+                    console.log('Token missing required drive.appdata scope, clearing old token...');
+                    deleteToken();
+                    return null;
+                }
+            }
+            
             console.log('Token loaded successfully');
             return token;
         } else {
