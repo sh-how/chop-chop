@@ -578,6 +578,16 @@ const SyncAPI = {
             method: 'POST',
             body: options
         });
+    },
+
+    /**
+     * Performs bidirectional sync: pulls changes from backup, then pushes local changes.
+     * This first merges any existing backup data into the local database,
+     * then exports all data back to Google Drive.
+     * @returns {Promise<Object>} Sync result with pull and push details.
+     */
+    async bidirectionalSync() {
+        return apiRequest('/sync/sync', { method: 'POST' });
     }
 };
 

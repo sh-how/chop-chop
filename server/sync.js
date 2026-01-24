@@ -682,6 +682,76 @@ function setupSyncRoutes(app, db) {
             res.status(500).json({ error: error.message });
         }
     });
+
+    /**
+     * POST /api/sync/sync - Bidirectional sync: pull changes from backup, then push local changes.
+     * This performs a merge import first (if backup exists), then exports all data.
+     */
+    app.post('/api/sync/sync', async (req, res) => {
+        try {
+            const auth = getAuthenticatedClient();
+            if (!auth) {
+                return res.status(401).json({ error: 'Not connected to Google Drive' });
+            }
+
+            const result = {
+                pulled: false,
+                pushed: false,
+                pullResult: null,
+                pushResult: null,
+                backupExisted: false
+            };
+
+            // Step 1: Check for existing backup and pull changes
+            console.log('=== Bidirectional Sync: Checking for existing backup ===');
+            const existingBackup = await downloadFromGoogleDrive(auth);
+            
+            if (existingBackup) {
+                result.backupExisted = true;
+                console.log('Existing backup found, dated:', existingBackup.exportedAt);
+                
+                // Import with merge mode to preserve local changes while pulling remote changes
+                const importResult = importDatabaseData(db, existingBackup, { merge: true });
+                result.pulled = importResult.success;
+                result.pullResult = {
+                    imported: importResult.imported,
+                    skipped: importResult.skipped,
+                    errors: importResult.errors,
+                    backupDate: existingBackup.exportedAt
+                };
+                console.log('Pull (import) completed:', importResult.success ? 'success' : 'with errors');
+            } else {
+                console.log('No existing backup found, skipping pull');
+            }
+
+            // Step 2: Export (push) current data to backup
+            console.log('=== Bidirectional Sync: Pushing local changes ===');
+            const exportData = exportDatabaseData(db);
+            const uploadResult = await uploadToGoogleDrive(auth, exportData);
+            
+            result.pushed = true;
+            result.pushResult = {
+                file: uploadResult,
+                exportedAt: exportData.exportedAt
+            };
+            console.log('Push (export) completed successfully');
+
+            res.json({
+                success: true,
+                message: result.backupExisted 
+                    ? 'Synced: pulled changes from backup, then pushed local changes'
+                    : 'Synced: created new backup with local data',
+                ...result
+            });
+        } catch (error) {
+            console.error('Bidirectional sync error:', error);
+            if (error.code === 401) {
+                deleteToken();
+                return res.status(401).json({ error: 'Session expired, please reconnect' });
+            }
+            res.status(500).json({ error: error.message });
+        }
+    });
 }
 
 module.exports = {

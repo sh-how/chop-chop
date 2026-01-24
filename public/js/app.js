@@ -4843,17 +4843,34 @@ async function handleSyncClick() {
 }
 
 /**
- * Performs a quick sync (export) without showing modal.
+ * Performs a bidirectional sync: pulls changes from backup first, then pushes local changes.
+ * This ensures any changes from other devices are merged before uploading.
  */
 async function performQuickSync() {
     try {
         setSyncingState(true);
-        showToast('Syncing to Google Drive...', 'info');
+        showToast('Syncing with Google Drive...', 'info');
         
-        const result = await SyncAPI.exportData();
+        const result = await SyncAPI.bidirectionalSync();
         
-        showToast('Synced to Google Drive successfully!', 'success');
+        if (result.backupExisted) {
+            showToast('Synced: pulled remote changes and pushed local data', 'success');
+        } else {
+            showToast('Synced: created new backup', 'success');
+        }
         updateSyncStatusDot(true);
+        
+        // If data was pulled from backup, we may need to refresh the UI
+        if (result.pulled && result.pullResult && Object.keys(result.pullResult.imported).length > 0) {
+            // Check if any data was actually imported
+            const importedCount = Object.values(result.pullResult.imported).reduce((a, b) => a + b, 0);
+            if (importedCount > 0) {
+                showToast('New data received, refreshing...', 'info');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            }
+        }
     } catch (error) {
         console.error('Quick sync failed:', error);
         
