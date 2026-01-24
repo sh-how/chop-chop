@@ -153,17 +153,37 @@ function exportDatabaseData(db) {
         try {
             const rows = db.prepare(`SELECT * FROM ${table}`).all();
             data.tables[table] = rows;
+            console.log(`Exported ${table}: ${rows.length} rows`);
         } catch (error) {
             console.error(`Error exporting table ${table}:`, error);
             data.tables[table] = [];
         }
     }
 
+    console.log('Export complete. Tables exported:', Object.keys(data.tables).map(t => `${t}: ${data.tables[t].length}`).join(', '));
     return data;
 }
 
 /**
+ * Gets the column names for a table from the database.
+ * @param {Database} db - The SQLite database instance.
+ * @param {string} table - Table name.
+ * @returns {string[]} Array of column names.
+ */
+function getTableColumns(db, table) {
+    try {
+        const info = db.prepare(`PRAGMA table_info(${table})`).all();
+        return info.map(col => col.name);
+    } catch (error) {
+        console.error(`Error getting columns for ${table}:`, error);
+        return [];
+    }
+}
+
+/**
  * Imports data from a JSON object into the database.
+ * Handles schema differences gracefully by only importing columns that exist in both
+ * the backup data and the current database schema.
  * @param {Database} db - The SQLite database instance.
  * @param {Object} data - The data to import.
  * @param {Object} options - Import options.
@@ -174,7 +194,8 @@ function importDatabaseData(db, data, options = { merge: false }) {
     const result = {
         success: true,
         imported: {},
-        errors: []
+        errors: [],
+        skipped: {}
     };
 
     if (!data.tables) {
@@ -205,8 +226,10 @@ function importDatabaseData(db, data, options = { merge: false }) {
             for (const table of [...importOrder].reverse()) {
                 try {
                     db.prepare(`DELETE FROM ${table}`).run();
+                    console.log(`Cleared table: ${table}`);
                 } catch (error) {
                     // Table might not exist
+                    console.log(`Could not clear table ${table}: ${error.message}`);
                 }
             }
         }
@@ -214,13 +237,34 @@ function importDatabaseData(db, data, options = { merge: false }) {
         // Import each table
         for (const table of importOrder) {
             const rows = data.tables[table];
-            if (!rows || !Array.isArray(rows)) continue;
+            if (!rows || !Array.isArray(rows)) {
+                console.log(`Skipping ${table}: no data in backup`);
+                continue;
+            }
 
+            console.log(`Importing ${table}: ${rows.length} rows`);
             result.imported[table] = 0;
+            result.skipped[table] = 0;
+
+            // Get valid columns for this table in the current database
+            const validColumns = getTableColumns(db, table);
+            if (validColumns.length === 0) {
+                console.log(`Skipping ${table}: table does not exist in database`);
+                result.errors.push(`Table ${table} does not exist in database`);
+                continue;
+            }
 
             for (const row of rows) {
                 try {
-                    const columns = Object.keys(row);
+                    // Filter to only columns that exist in current database schema
+                    const rowColumns = Object.keys(row);
+                    const columns = rowColumns.filter(col => validColumns.includes(col));
+                    
+                    if (columns.length === 0) {
+                        result.skipped[table]++;
+                        continue;
+                    }
+
                     const placeholders = columns.map(() => '?').join(', ');
                     const values = columns.map(col => row[col]);
 
@@ -234,9 +278,13 @@ function importDatabaseData(db, data, options = { merge: false }) {
                     }
                     result.imported[table]++;
                 } catch (error) {
-                    result.errors.push(`Error importing ${table}: ${error.message}`);
+                    console.error(`Error importing row into ${table}:`, error.message);
+                    result.errors.push(`Error importing ${table} row: ${error.message}`);
+                    result.skipped[table]++;
                 }
             }
+            
+            console.log(`Imported ${result.imported[table]} rows into ${table}, skipped ${result.skipped[table]}`);
         }
     });
 
@@ -245,6 +293,7 @@ function importDatabaseData(db, data, options = { merge: false }) {
     } catch (error) {
         result.success = false;
         result.errors.push(`Transaction failed: ${error.message}`);
+        console.error('Import transaction failed:', error);
     }
 
     return result;
@@ -614,11 +663,16 @@ function setupSyncRoutes(app, db) {
             // Import into database
             const result = importDatabaseData(db, data, { merge });
 
+            // Log import results
+            console.log('Import results:', JSON.stringify(result, null, 2));
+
             res.json({
                 success: result.success,
                 message: result.success ? 'Data imported from Google Drive' : 'Import completed with errors',
                 imported: result.imported,
-                errors: result.errors
+                skipped: result.skipped,
+                errors: result.errors,
+                backupDate: data.exportedAt
             });
         } catch (error) {
             if (error.code === 401) {
