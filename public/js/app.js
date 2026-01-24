@@ -3438,7 +3438,10 @@ function renderTasks(tasks) {
 
     statuses.forEach(status => {
         const column = document.getElementById(`tasks-${status}`);
-        const statusTasks = tasks.filter(t => t.status === status);
+        // Filter tasks by status and sort by sort_order to maintain correct ordering
+        const statusTasks = tasks
+            .filter(t => t.status === status)
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
         const countEl = document.querySelector(`.task-column[data-status="${status}"] .column-count`);
         
         if (countEl) countEl.textContent = statusTasks.length;
@@ -3494,26 +3497,35 @@ let draggedTask = null;
 let taskDragOccurred = false;
 
 /**
+ * Tracks if column drop zone listeners have been initialized.
+ */
+let columnListenersInitialized = false;
+
+/**
  * Initializes drag and drop functionality for task items.
+ * Column listeners are only attached once; task item listeners are re-attached on each render.
  */
 function initTaskDragAndDrop() {
     const taskItems = document.querySelectorAll('.task-item[draggable="true"]');
     const columns = document.querySelectorAll('.task-column-body');
 
-    // Task item drag events
+    // Task item drag events (re-attached each render since items are recreated)
     taskItems.forEach(item => {
         item.addEventListener('dragstart', handleTaskDragStart);
         item.addEventListener('dragend', handleTaskDragEnd);
         item.addEventListener('click', handleTaskClick);
     });
 
-    // Column drop zone events
-    columns.forEach(column => {
-        column.addEventListener('dragover', handleTaskDragOver);
-        column.addEventListener('dragenter', handleTaskDragEnter);
-        column.addEventListener('dragleave', handleTaskDragLeave);
-        column.addEventListener('drop', handleTaskDrop);
-    });
+    // Column drop zone events - only attach once to avoid duplicate handlers
+    if (!columnListenersInitialized) {
+        columns.forEach(column => {
+            column.addEventListener('dragover', handleTaskDragOver);
+            column.addEventListener('dragenter', handleTaskDragEnter);
+            column.addEventListener('dragleave', handleTaskDragLeave);
+            column.addEventListener('drop', handleTaskDrop);
+        });
+        columnListenersInitialized = true;
+    }
 }
 
 /**
@@ -3581,6 +3593,12 @@ function handleTaskDragOver(e) {
     const draggingItem = document.querySelector('.task-item.dragging');
     if (!draggingItem) return;
     
+    // Remove empty state if present (when dragging into empty column)
+    const emptyState = this.querySelector('.empty-state');
+    if (emptyState) {
+        emptyState.remove();
+    }
+    
     const afterElement = getDragAfterElement(this, e.clientY);
     
     // Move the dragged element in the DOM for real-time visual feedback
@@ -3634,6 +3652,12 @@ async function handleTaskDrop(e) {
     const oldStatus = task.status;
     task.status = newStatus;
     
+    // Add empty state to any columns that are now empty
+    updateEmptyColumnStates();
+    
+    // Update column counts
+    updateTaskColumnCounts();
+    
     // Get the new order from DOM and save to database
     await saveTaskOrderFromDOM();
     
@@ -3641,6 +3665,46 @@ async function handleTaskDrop(e) {
     if (oldStatus !== newStatus) {
         showToast(`Task moved to ${newStatus.replace('_', ' ')}`, 'success');
     }
+}
+
+/**
+ * Updates empty state display for all task columns.
+ * Adds empty state to columns with no tasks, removes it from columns with tasks.
+ */
+function updateEmptyColumnStates() {
+    const statuses = ['pending', 'in_progress', 'completed'];
+    
+    statuses.forEach(status => {
+        const column = document.getElementById(`tasks-${status}`);
+        if (!column) return;
+        
+        const taskItems = column.querySelectorAll('.task-item');
+        const emptyState = column.querySelector('.empty-state');
+        
+        if (taskItems.length === 0 && !emptyState) {
+            // Add empty state if no tasks and no empty state exists
+            column.innerHTML = '<div class="empty-state small drop-zone"><p>No tasks</p></div>';
+        }
+    });
+}
+
+/**
+ * Updates the task count badges in column headers.
+ */
+function updateTaskColumnCounts() {
+    const statuses = ['pending', 'in_progress', 'completed'];
+    
+    statuses.forEach(status => {
+        const column = document.getElementById(`tasks-${status}`);
+        if (!column) return;
+        
+        const taskCount = column.querySelectorAll('.task-item').length;
+        const countEl = document.querySelector(`.task-column[data-status="${status}"] .column-count`);
+        
+        if (countEl) {
+            countEl.textContent = taskCount;
+        }
+    });
 }
 
 /**
@@ -3674,11 +3738,17 @@ async function saveTaskOrderFromDOM() {
         });
     });
     
+    // Skip API call if nothing to update
+    if (tasksToUpdate.length === 0) {
+        return;
+    }
+    
     // Save to database
     try {
         await TasksAPI.reorder(tasksToUpdate);
     } catch (error) {
         console.error('Failed to save task order:', error);
+        console.error('Tasks that failed to save:', tasksToUpdate);
         showToast('Failed to save task order', 'error');
         // Reload tasks to revert to server state
         loadTasks();

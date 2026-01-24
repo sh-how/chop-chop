@@ -1438,11 +1438,16 @@ body.task-dragging .task-column-body .empty-state {
     border-radius: var(--radius-md);
     padding: var(--space-4);
     transition: var(--transition-fast);
+    pointer-events: none;
 }
 
 body.task-dragging .task-column-body.drag-over .empty-state {
     border-color: var(--accent-primary);
     background: rgba(99, 102, 241, 0.1);
+}
+
+body.task-dragging .task-column-body {
+    min-height: 100px;
 }
 
 /* ============================================

@@ -1134,6 +1134,47 @@ app.post('/api/tasks', (req, res) => {
 });
 
 /**
+ * PUT /api/tasks/reorder - Reorder tasks in bulk.
+ * NOTE: This route MUST be defined before PUT /api/tasks/:id to avoid :id matching "reorder"
+ * Body: { tasks: [{ id: number, status: string, sort_order: number }, ...] }
+ */
+app.put('/api/tasks/reorder', (req, res) => {
+    try {
+        const { tasks } = req.body;
+        
+        if (!tasks || !Array.isArray(tasks)) {
+            return res.status(400).json({ error: 'Tasks array is required' });
+        }
+
+        // Skip if empty array
+        if (tasks.length === 0) {
+            return res.json({ success: true, message: 'No tasks to reorder' });
+        }
+
+        const updateStmt = db.prepare(`
+            UPDATE tasks 
+            SET sort_order = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `);
+
+        const transaction = db.transaction(() => {
+            for (const task of tasks) {
+                if (task.id && typeof task.sort_order === 'number' && task.status) {
+                    updateStmt.run(task.sort_order, task.status, task.id);
+                }
+            }
+        });
+
+        transaction();
+
+        res.json({ success: true, message: 'Tasks reordered successfully' });
+    } catch (error) {
+        console.error('Task reorder error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * PUT /api/tasks/:id - Update a task.
  */
 app.put('/api/tasks/:id', (req, res) => {
@@ -1185,40 +1226,6 @@ app.delete('/api/tasks/:id', (req, res) => {
         logActivity('deleted', 'task', req.params.id, existing.title);
         
         res.json({ message: 'Task deleted successfully' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-/**
- * PUT /api/tasks/reorder - Reorder tasks in bulk.
- * Body: { tasks: [{ id: number, status: string, sort_order: number }, ...] }
- */
-app.put('/api/tasks/reorder', (req, res) => {
-    try {
-        const { tasks } = req.body;
-        
-        if (!tasks || !Array.isArray(tasks)) {
-            return res.status(400).json({ error: 'Tasks array is required' });
-        }
-
-        const updateStmt = db.prepare(`
-            UPDATE tasks 
-            SET sort_order = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `);
-
-        const transaction = db.transaction(() => {
-            for (const task of tasks) {
-                if (task.id && typeof task.sort_order === 'number') {
-                    updateStmt.run(task.sort_order, task.status, task.id);
-                }
-            }
-        });
-
-        transaction();
-
-        res.json({ success: true, message: 'Tasks reordered successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -28,10 +28,19 @@ async function apiRequest(endpoint, options = {}) {
 
     try {
         const response = await fetch(url, config);
-        const data = await response.json();
+        
+        // Handle non-JSON responses
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            const text = await response.text();
+            throw new Error(`Unexpected response: ${text.substring(0, 100)}`);
+        }
 
         if (!response.ok) {
-            throw new Error(data.error || 'An error occurred');
+            throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
         }
 
         return data;
