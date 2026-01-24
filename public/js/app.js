@@ -1132,6 +1132,10 @@ function renderProjectPopupItem(project) {
     const priorityColor = priorityColors[project.priority] || priorityColors.medium;
     const internsCount = project.interns ? project.interns.length : 0;
     const deadline = project.deadline ? formatDate(project.deadline) : 'No deadline';
+    const taskStats = project.task_stats;
+    const taskText = taskStats?.total > 0 
+        ? `${taskStats.completed}/${taskStats.total} tasks` 
+        : 'No tasks';
     
     return `
         <div class="stat-popup-item" onclick="closeStatPopup('projectsPopupOverlay'); showProjectDetail(${project.id});">
@@ -1144,7 +1148,7 @@ function renderProjectPopupItem(project) {
                 <div class="stat-popup-item-title">${escapeHtml(project.name)}</div>
                 <div class="stat-popup-item-meta">
                     <span class="priority-indicator ${project.priority || 'medium'}"></span>
-                    <span>${internsCount} intern${internsCount !== 1 ? 's' : ''}</span>
+                    <span>${taskText}</span>
                     <span>${deadline}</span>
                 </div>
             </div>
@@ -2961,11 +2965,11 @@ function renderProjects(projects) {
             </div>
             <div class="progress-section">
                 <div class="progress-header">
-                    <span>Progress</span>
-                    <span class="progress-value">${project.progress}%</span>
+                    <span>Tasks${project.task_stats?.total > 0 ? ` (${project.task_stats.completed}/${project.task_stats.total})` : ''}</span>
+                    <span class="progress-value">${project.task_stats?.progress ?? project.progress}%</span>
                 </div>
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${project.progress}%"></div>
+                    <div class="progress-fill" style="width: ${project.task_stats?.progress ?? project.progress}%"></div>
                 </div>
             </div>
             <div class="project-actions">
@@ -3032,6 +3036,21 @@ async function showProjectDetail(id) {
                     <div class="project-detail-item">
                         <span class="project-detail-label">Last Updated</span>
                         <span class="project-detail-value">${formatDate(project.updated_at)}</span>
+                    </div>
+                </div>
+                
+                <div class="project-detail-section">
+                    <h4>Task Completion</h4>
+                    <div class="progress-section" style="margin-top: 0.5rem;">
+                        <div class="progress-header">
+                            <span>${project.task_stats?.total > 0 
+                                ? `${project.task_stats.completed} of ${project.task_stats.total} tasks completed` 
+                                : 'No tasks assigned'}</span>
+                            <span class="progress-value">${project.task_stats?.progress ?? 0}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${project.task_stats?.progress ?? 0}%"></div>
+                        </div>
                     </div>
                 </div>
                 

@@ -874,8 +874,8 @@ app.get('/api/projects', (req, res) => {
         query += ' ORDER BY created_at DESC';
         const projects = db.prepare(query).all(...params);
 
-        // Get assigned interns for each project
-        const projectsWithInterns = projects.map(project => {
+        // Get assigned interns and task completion stats for each project
+        const projectsWithDetails = projects.map(project => {
             const interns = db.prepare(`
                 SELECT i.id, i.name, i.avatar_color, pa.role as assignment_role, pa.is_lead
                 FROM interns i
@@ -883,10 +883,32 @@ app.get('/api/projects', (req, res) => {
                 WHERE pa.project_id = ?
                 ORDER BY pa.is_lead DESC, i.name ASC
             `).all(project.id);
-            return { ...project, assigned_interns: interns };
+            
+            // Get task completion stats for this project
+            const taskStats = db.prepare(`
+                SELECT 
+                    COUNT(*) as total_tasks,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
+                FROM tasks 
+                WHERE project_id = ?
+            `).get(project.id);
+            
+            const totalTasks = taskStats?.total_tasks || 0;
+            const completedTasks = taskStats?.completed_tasks || 0;
+            const taskProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+            
+            return { 
+                ...project, 
+                assigned_interns: interns,
+                task_stats: {
+                    total: totalTasks,
+                    completed: completedTasks,
+                    progress: taskProgress
+                }
+            };
         });
 
-        res.json(projectsWithInterns);
+        res.json(projectsWithDetails);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -913,8 +935,19 @@ app.get('/api/projects/:id', (req, res) => {
 
         // Get tasks
         const tasks = db.prepare('SELECT * FROM tasks WHERE project_id = ?').all(req.params.id);
+        
+        // Calculate task completion stats
+        const totalTasks = tasks.length;
+        const completedTasks = tasks.filter(t => t.status === 'completed').length;
+        const taskProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        
+        const taskStats = {
+            total: totalTasks,
+            completed: completedTasks,
+            progress: taskProgress
+        };
 
-        res.json({ ...project, assigned_interns: interns, tasks });
+        res.json({ ...project, assigned_interns: interns, tasks, task_stats: taskStats });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
