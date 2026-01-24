@@ -7,7 +7,10 @@ A web application to track intern progress, schedules, and projects (NOT LIMITED
 ## Features
 
 - Track interns information and progress
-- Manage schedules and projects
+- Manage projects with task-based completion tracking
+- Kanban-style task management with drag-and-drop
+- Schedule and calendar management
+- Google Drive backup and sync
 - File upload support
 
 ## Screenshots
@@ -39,23 +42,35 @@ A web application to track intern progress, schedules, and projects (NOT LIMITED
    npm install
    ```
 
-3. Start the server:
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your Google OAuth credentials (optional, for sync feature)
+   ```
+
+4. Start the server:
    ```bash
    npm start
    ```
+   For development with hot reload:
+   ```bash
+   npm run dev
+   ```
 
-4. Open your browser and navigate to `http://localhost:3000`
+5. Open your browser and navigate to `http://localhost:3000`
 
 ## Project Structure
 
 ```
-├── data/               # SQLite database
+├── data/               # SQLite database and tokens
 ├── public/             # Frontend files
 │   ├── css/           # Stylesheets
 │   ├── js/            # JavaScript files
 │   └── index.html     # Main HTML file
 ├── server/            # Backend server
-│   └── index.js       # Express server
+│   ├── index.js       # Express server
+│   ├── sync.js        # Google Drive sync
+│   └── dev.js         # Development server with hot reload
 ├── uploads/           # Uploaded files
 └── package.json       # Project configuration
 ```
