@@ -24,14 +24,95 @@ const BACKUP_MIME_TYPE = 'application/json';
 const TOKEN_PATH = path.join(__dirname, '../data/google-token.json');
 console.log('Google token path:', TOKEN_PATH);
 
+// Database reference (set during setupSyncRoutes)
+let _db = null;
+
+/**
+ * Loads Google OAuth credentials from the database settings table.
+ * @returns {Object|null} Credentials object {clientId, clientSecret, redirectUri} or null.
+ */
+function loadCredentialsFromDatabase() {
+    if (!_db) return null;
+    
+    try {
+        const result = _db.prepare('SELECT value FROM settings WHERE key = ?').get('google_oauth_credentials');
+        if (result && result.value) {
+            const credentials = JSON.parse(result.value);
+            if (credentials.clientId && credentials.clientSecret) {
+                return credentials;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading credentials from database:', error);
+    }
+    return null;
+}
+
+/**
+ * Saves Google OAuth credentials to the database settings table.
+ * @param {Object} credentials - {clientId, clientSecret, redirectUri}
+ * @returns {boolean} True if saved successfully.
+ */
+function saveCredentialsToDatabase(credentials) {
+    if (!_db) return false;
+    
+    try {
+        const value = JSON.stringify({
+            clientId: credentials.clientId,
+            clientSecret: credentials.clientSecret,
+            redirectUri: credentials.redirectUri || 'http://localhost:3000/api/sync/callback'
+        });
+        
+        _db.prepare(`
+            INSERT INTO settings (key, value, updated_at) 
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+        `).run('google_oauth_credentials', value, value);
+        
+        return true;
+    } catch (error) {
+        console.error('Error saving credentials to database:', error);
+        return false;
+    }
+}
+
+/**
+ * Deletes Google OAuth credentials from the database.
+ * @returns {boolean} True if deleted successfully.
+ */
+function deleteCredentialsFromDatabase() {
+    if (!_db) return false;
+    
+    try {
+        _db.prepare('DELETE FROM settings WHERE key = ?').run('google_oauth_credentials');
+        return true;
+    } catch (error) {
+        console.error('Error deleting credentials from database:', error);
+        return false;
+    }
+}
+
 /**
  * Creates and configures the OAuth2 client.
+ * First checks database settings, then falls back to environment variables.
  * @returns {OAuth2Client|null} Configured OAuth2 client or null if credentials missing.
  */
 function createOAuth2Client() {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/sync/callback';
+    // First, try to load from database
+    const dbCredentials = loadCredentialsFromDatabase();
+    
+    let clientId, clientSecret, redirectUri;
+    
+    if (dbCredentials) {
+        clientId = dbCredentials.clientId;
+        clientSecret = dbCredentials.clientSecret;
+        redirectUri = dbCredentials.redirectUri || 'http://localhost:3000/api/sync/callback';
+    } else {
+        // Fall back to environment variables
+        clientId = process.env.GOOGLE_CLIENT_ID;
+        clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/sync/callback';
+    }
 
     if (!clientId || !clientSecret) {
         return null;
@@ -406,6 +487,88 @@ async function getUserInfo(auth) {
  * @param {Database} db - SQLite database instance.
  */
 function setupSyncRoutes(app, db) {
+    // Store database reference for credential storage functions
+    _db = db;
+
+    /**
+     * GET /api/sync/credentials - Get current credentials configuration status.
+     * Does not return the actual secrets, just whether they are configured.
+     */
+    app.get('/api/sync/credentials', (req, res) => {
+        try {
+            const dbCredentials = loadCredentialsFromDatabase();
+            const envConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+            
+            res.json({
+                configured: !!(dbCredentials || envConfigured),
+                source: dbCredentials ? 'database' : (envConfigured ? 'environment' : 'none'),
+                clientId: dbCredentials?.clientId ? `${dbCredentials.clientId.substring(0, 20)}...` : null,
+                redirectUri: dbCredentials?.redirectUri || process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/sync/callback'
+            });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    /**
+     * POST /api/sync/credentials - Save Google OAuth credentials.
+     * Body: { clientId, clientSecret, redirectUri (optional) }
+     */
+    app.post('/api/sync/credentials', (req, res) => {
+        try {
+            const { clientId, clientSecret, redirectUri } = req.body;
+            
+            if (!clientId || !clientSecret) {
+                return res.status(400).json({ 
+                    error: 'Client ID and Client Secret are required' 
+                });
+            }
+            
+            // Basic validation
+            if (!clientId.includes('.apps.googleusercontent.com')) {
+                return res.status(400).json({ 
+                    error: 'Invalid Client ID format. It should end with .apps.googleusercontent.com' 
+                });
+            }
+            
+            const saved = saveCredentialsToDatabase({
+                clientId: clientId.trim(),
+                clientSecret: clientSecret.trim(),
+                redirectUri: redirectUri?.trim() || 'http://localhost:3000/api/sync/callback'
+            });
+            
+            if (saved) {
+                // Clear any existing token since credentials changed
+                deleteToken();
+                
+                res.json({ 
+                    success: true, 
+                    message: 'Credentials saved successfully. You can now connect to Google Drive.' 
+                });
+            } else {
+                res.status(500).json({ error: 'Failed to save credentials' });
+            }
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    /**
+     * DELETE /api/sync/credentials - Remove saved credentials.
+     */
+    app.delete('/api/sync/credentials', (req, res) => {
+        try {
+            deleteToken();
+            deleteCredentialsFromDatabase();
+            res.json({ 
+                success: true, 
+                message: 'Credentials removed successfully' 
+            });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
     /**
      * GET /api/sync/status - Get current sync status and connection info.
      */

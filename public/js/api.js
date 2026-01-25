@@ -545,6 +545,34 @@ const SyncAPI = {
     },
 
     /**
+     * Gets current credentials configuration status.
+     * @returns {Promise<Object>} Credentials status with source info.
+     */
+    async getCredentials() {
+        return apiRequest('/sync/credentials');
+    },
+
+    /**
+     * Saves Google OAuth credentials.
+     * @param {Object} credentials - {clientId, clientSecret, redirectUri}.
+     * @returns {Promise<Object>} Success confirmation.
+     */
+    async saveCredentials(credentials) {
+        return apiRequest('/sync/credentials', {
+            method: 'POST',
+            body: credentials
+        });
+    },
+
+    /**
+     * Removes saved Google OAuth credentials.
+     * @returns {Promise<Object>} Success confirmation.
+     */
+    async deleteCredentials() {
+        return apiRequest('/sync/credentials', { method: 'DELETE' });
+    },
+
+    /**
      * Initiates Google OAuth flow.
      * @returns {Promise<Object>} Object containing authUrl to redirect user.
      */

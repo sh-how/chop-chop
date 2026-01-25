@@ -741,10 +741,54 @@
                             <line x1="12" y1="16" x2="12.01" y2="16"/>
                         </svg>
                     </div>
-                    <h4>Not Configured</h4>
-                    <p>Google OAuth credentials are not configured. Please set up GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file.</p>
+                    <h4>Setup Google Drive Sync</h4>
+                    <p>Enter your Google Cloud OAuth credentials to enable sync.</p>
+                    
+                    <form id="credentialsForm" class="credentials-form" onsubmit="saveGoogleCredentials(event)">
+                        <div class="form-group">
+                            <label for="googleClientId">Client ID</label>
+                            <input type="text" id="googleClientId" name="clientId" 
+                                   placeholder="xxxx.apps.googleusercontent.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="googleClientSecret">Client Secret</label>
+                            <input type="password" id="googleClientSecret" name="clientSecret" 
+                                   placeholder="Your client secret" required>
+                            <button type="button" class="btn-toggle-password" onclick="togglePasswordVisibility('googleClientSecret')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="form-group">
+                            <label for="googleRedirectUri">Redirect URI <span class="label-hint">(optional)</span></label>
+                            <input type="text" id="googleRedirectUri" name="redirectUri" 
+                                   placeholder="http://localhost:3000/api/sync/callback">
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="saveCredentialsBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17 21 17 13 7 13 7 21"/>
+                                <polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                            Save Credentials
+                        </button>
+                    </form>
+                    
                     <div class="sync-help">
-                        <p>See <code>.env.example</code> for setup instructions.</p>
+                        <details>
+                            <summary>How to get Google Cloud credentials</summary>
+                            <ol>
+                                <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                                <li>Create a new project or select existing</li>
+                                <li>Enable the Google Drive API (APIs & Services > Library)</li>
+                                <li>Configure OAuth consent screen (APIs & Services > OAuth consent screen)</li>
+                                <li>Create OAuth credentials (APIs & Services > Credentials > Create > OAuth client ID)</li>
+                                <li>Select "Web application" and add redirect URI: <code>http://localhost:3000/api/sync/callback</code></li>
+                                <li>Copy the Client ID and Client Secret above</li>
+                            </ol>
+                        </details>
                     </div>
                 </div>
 

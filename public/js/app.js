@@ -5140,6 +5140,69 @@ async function connectGoogle() {
 }
 
 /**
+ * Saves Google OAuth credentials from the form.
+ * @param {Event} event - Form submit event.
+ */
+async function saveGoogleCredentials(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    const clientId = form.querySelector('#googleClientId').value.trim();
+    const clientSecret = form.querySelector('#googleClientSecret').value.trim();
+    const redirectUri = form.querySelector('#googleRedirectUri').value.trim();
+    
+    if (!clientId || !clientSecret) {
+        showToast('Client ID and Client Secret are required', 'error');
+        return;
+    }
+    
+    try {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="sync-spinner" style="width:16px;height:16px;border-width:2px;"></span> Saving...';
+        
+        await SyncAPI.saveCredentials({
+            clientId,
+            clientSecret,
+            redirectUri: redirectUri || undefined
+        });
+        
+        showToast('Credentials saved successfully!', 'success');
+        
+        // Clear form and reload sync status
+        form.reset();
+        await loadSyncStatus();
+    } catch (error) {
+        console.error('Failed to save credentials:', error);
+        showToast(error.message || 'Failed to save credentials', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+}
+
+/**
+ * Toggles password visibility for an input field.
+ * @param {string} inputId - The ID of the input field.
+ */
+function togglePasswordVisibility(inputId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        if (input.type === 'password') {
+            input.type = 'text';
+        } else {
+            input.type = 'password';
+        }
+    }
+}
+
+// Make credentials functions available globally
+window.saveGoogleCredentials = saveGoogleCredentials;
+window.togglePasswordVisibility = togglePasswordVisibility;
+
+/**
  * Disconnects from Google Drive.
  */
 async function disconnectGoogle() {
