@@ -262,13 +262,74 @@ function getTableColumns(db, table) {
 }
 
 /**
+ * Gets the primary key column name for a table.
+ * @param {string} table - Table name.
+ * @returns {string} Primary key column name ('id' for most tables, 'key' for settings).
+ */
+function getPrimaryKeyColumn(table) {
+    // Settings table uses 'key' as primary key, all others use 'id'
+    return table === 'settings' ? 'key' : 'id';
+}
+
+/**
+ * Gets the timestamp column name used for tracking updates.
+ * @param {string} table - Table name.
+ * @returns {string|null} The timestamp column name or null if none exists.
+ */
+function getTimestampColumn(table) {
+    // Tables with updated_at column
+    const tablesWithUpdatedAt = [
+        'interns', 'projects', 'tasks', 'events', 
+        'intern_notes', 'weekly_reports', 'settings'
+    ];
+    
+    // Tables with different timestamp columns
+    const timestampMap = {
+        'project_assignments': 'assigned_at',
+        'event_assignments': 'assigned_at',
+        'intern_files': 'uploaded_at'
+        // Note: activity_log is excluded - it's append-only and handled specially
+    };
+    
+    if (tablesWithUpdatedAt.includes(table)) {
+        return 'updated_at';
+    }
+    return timestampMap[table] || null;
+}
+
+/**
+ * Checks if a table should use append-only merge logic.
+ * Append-only tables never overwrite existing records during merge.
+ * @param {string} table - Table name.
+ * @returns {boolean} True if table is append-only.
+ */
+function isAppendOnlyTable(table) {
+    // Activity log entries are historical records that should never be overwritten
+    // Each entry represents a unique point-in-time event
+    return table === 'activity_log';
+}
+
+/**
+ * Compares two timestamp strings and returns true if the first is newer.
+ * @param {string} timestamp1 - First timestamp (incoming/backup).
+ * @param {string} timestamp2 - Second timestamp (local/existing).
+ * @returns {boolean} True if timestamp1 is newer than timestamp2.
+ */
+function isNewerTimestamp(timestamp1, timestamp2) {
+    if (!timestamp1) return false;
+    if (!timestamp2) return true;
+    return new Date(timestamp1) > new Date(timestamp2);
+}
+
+/**
  * Imports data from a JSON object into the database.
  * Handles schema differences gracefully by only importing columns that exist in both
  * the backup data and the current database schema.
+ * In merge mode, compares timestamps to only import records that are newer than local data.
  * @param {Database} db - The SQLite database instance.
  * @param {Object} data - The data to import.
  * @param {Object} options - Import options.
- * @param {boolean} options.merge - If true, merges with existing data. If false, replaces all data.
+ * @param {boolean} options.merge - If true, merges with existing data (only imports newer records). If false, replaces all data.
  * @returns {Object} Import result with counts.
  */
 function importDatabaseData(db, data, options = { merge: false }) {
@@ -276,7 +337,8 @@ function importDatabaseData(db, data, options = { merge: false }) {
         success: true,
         imported: {},
         errors: [],
-        skipped: {}
+        skipped: {},
+        keptLocal: {}  // Track records where local was newer
     };
 
     if (!data.tables) {
@@ -326,6 +388,7 @@ function importDatabaseData(db, data, options = { merge: false }) {
             console.log(`Importing ${table}: ${rows.length} rows`);
             result.imported[table] = 0;
             result.skipped[table] = 0;
+            result.keptLocal[table] = 0;
 
             // Get valid columns for this table in the current database
             const validColumns = getTableColumns(db, table);
@@ -334,6 +397,9 @@ function importDatabaseData(db, data, options = { merge: false }) {
                 result.errors.push(`Table ${table} does not exist in database`);
                 continue;
             }
+
+            const pkColumn = getPrimaryKeyColumn(table);
+            const timestampColumn = getTimestampColumn(table);
 
             for (const row of rows) {
                 try {
@@ -350,7 +416,41 @@ function importDatabaseData(db, data, options = { merge: false }) {
                     const values = columns.map(col => row[col]);
 
                     if (options.merge) {
-                        // Use INSERT OR REPLACE for merge mode
+                        // In merge mode, check if record exists and compare timestamps
+                        const pkValue = row[pkColumn];
+                        
+                        if (pkValue !== undefined && pkValue !== null) {
+                            // Check if local record exists
+                            const localRecord = db.prepare(
+                                `SELECT * FROM ${table} WHERE ${pkColumn} = ?`
+                            ).get(pkValue);
+                            
+                            if (localRecord) {
+                                // Handle append-only tables (like activity_log) - never overwrite
+                                if (isAppendOnlyTable(table)) {
+                                    // Skip this record - local entry with same ID already exists
+                                    // Activity log entries are immutable historical records
+                                    result.keptLocal[table]++;
+                                    continue;
+                                }
+                                
+                                // For other tables, compare timestamps - only import if backup is newer
+                                if (timestampColumn) {
+                                    const backupTimestamp = row[timestampColumn];
+                                    const localTimestamp = localRecord[timestampColumn];
+                                    
+                                    if (!isNewerTimestamp(backupTimestamp, localTimestamp)) {
+                                        // Local record is newer or same age, keep it
+                                        console.log(`Keeping local ${table} record (id=${pkValue}): local=${localTimestamp}, backup=${backupTimestamp}`);
+                                        result.keptLocal[table]++;
+                                        continue;
+                                    }
+                                    console.log(`Updating ${table} record (id=${pkValue}): backup is newer (local=${localTimestamp}, backup=${backupTimestamp})`);
+                                }
+                            }
+                        }
+                        
+                        // Insert or replace - either record doesn't exist, or backup is newer
                         const sql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
                         db.prepare(sql).run(...values);
                     } else {
@@ -365,7 +465,7 @@ function importDatabaseData(db, data, options = { merge: false }) {
                 }
             }
             
-            console.log(`Imported ${result.imported[table]} rows into ${table}, skipped ${result.skipped[table]}`);
+            console.log(`Table ${table}: imported ${result.imported[table]}, kept local ${result.keptLocal[table]}, skipped ${result.skipped[table]}`);
         }
     });
 
@@ -833,6 +933,7 @@ function setupSyncRoutes(app, db) {
                 success: result.success,
                 message: result.success ? 'Data imported from Google Drive' : 'Import completed with errors',
                 imported: result.imported,
+                keptLocal: result.keptLocal,
                 skipped: result.skipped,
                 errors: result.errors,
                 backupDate: data.exportedAt
@@ -874,15 +975,18 @@ function setupSyncRoutes(app, db) {
                 console.log('Existing backup found, dated:', existingBackup.exportedAt);
                 
                 // Import with merge mode to preserve local changes while pulling remote changes
+                // Only imports records where backup is newer than local data
                 const importResult = importDatabaseData(db, existingBackup, { merge: true });
                 result.pulled = importResult.success;
                 result.pullResult = {
                     imported: importResult.imported,
+                    keptLocal: importResult.keptLocal,
                     skipped: importResult.skipped,
                     errors: importResult.errors,
                     backupDate: existingBackup.exportedAt
                 };
                 console.log('Pull (import) completed:', importResult.success ? 'success' : 'with errors');
+                console.log('Records kept local (newer than backup):', JSON.stringify(importResult.keptLocal));
             } else {
                 console.log('No existing backup found, skipping pull');
             }
