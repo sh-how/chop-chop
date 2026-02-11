@@ -1543,7 +1543,7 @@ app.post('/api/reports', (req, res) => {
  */
 app.put('/api/reports/:id', (req, res) => {
     try {
-        const { accomplishments, challenges, next_week_goals, hours_worked, supervisor_feedback, rating } = req.body;
+        const { week_start, week_end, accomplishments, challenges, next_week_goals, hours_worked, supervisor_feedback, rating } = req.body;
         
         const existing = db.prepare('SELECT * FROM weekly_reports WHERE id = ?').get(req.params.id);
         if (!existing) {
@@ -1552,12 +1552,12 @@ app.put('/api/reports/:id', (req, res) => {
 
         const stmt = db.prepare(`
             UPDATE weekly_reports 
-            SET accomplishments = ?, challenges = ?, next_week_goals = ?, hours_worked = ?, 
+            SET week_start = ?, week_end = ?, accomplishments = ?, challenges = ?, next_week_goals = ?, hours_worked = ?, 
                 supervisor_feedback = ?, rating = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         `);
         
-        stmt.run(accomplishments, challenges, next_week_goals, hours_worked, supervisor_feedback, rating, req.params.id);
+        stmt.run(week_start, week_end, accomplishments, challenges, next_week_goals, hours_worked, supervisor_feedback, rating, req.params.id);
         
         const report = db.prepare('SELECT * FROM weekly_reports WHERE id = ?').get(req.params.id);
         res.json(report);
